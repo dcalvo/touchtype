@@ -1,11 +1,10 @@
+from dataclasses import dataclass
+
 import cv2
-import torch
-import numpy as np
 
 from leap import HandType
 from leap.cstruct import LeapCStruct
-from leap.datatypes import Digit, Bone, Palm, Hand, Vector
-from leap.events import TrackingEvent
+from leap.datatypes import Digit, Hand
 from leap_motion_tracker import LeapMotionTracker
 
 hand_data_headers = [
@@ -96,55 +95,89 @@ def extract_digit_data(digit: Digit):
     return digit_data
 
 
-def extract_event_data(event: TrackingEvent):
+def extract_hand_data(hand: Hand):
     """
-    Extract data from a TrackingEvent. Flatten the data from each hand, palm, digit and bone.
-    :param event: event to extract data from
+    Extract data from a hand. This includes the hand data, palm data and each digit data.
+    :param hand: hand to extract data from
     :return: list of extracted data
     """
-    for hand in event.hands:
-        # Ignore left hand (for now)
-        if hand.type == HandType.Left:
-            continue
-
-        # Extract hand data
-        hand_data = extract_data(hand, hand_data_headers)
-
-        # Extract palm data
-        palm_data = extract_data(hand.palm, palm_data_headers)
-
-        # Extract thumb data
-        thumb_data = extract_digit_data(hand.thumb)
-
-        # Extract index data
-        index_data = extract_digit_data(hand.index)
-
-        # Extract middle data
-        middle_data = extract_digit_data(hand.middle)
-
-        # Extract ring data
-        ring_data = extract_digit_data(hand.ring)
-
-        # Extract pinky data
-        pinky_data = extract_digit_data(hand.pinky)
-
-        # Flatten data
-        data = [
-            *hand_data,
-            *palm_data,
-            *thumb_data,
-            *index_data,
-            *middle_data,
-            *ring_data,
-            *pinky_data,
-        ]
-
-        return data
+    hand_data = extract_data(hand, hand_data_headers)
+    palm_data = extract_data(hand.palm, palm_data_headers)
+    hand_data.extend(palm_data)
+    for digit in hand.digits:
+        digit_data = extract_digit_data(digit)
+        hand_data.extend(digit_data)
+    return hand_data
 
 
-def roll_up_event_data(event_data: list):
-    # Roll up hand data
+@dataclass
+class LeapCStructMock:
+    """
+    Mock class to replace LeapCStruct. Not guaranteed to have all the same fields.
+    The _data_headers lists should inform what fields are expected.
+    """
     pass
+
+
+def roll_up_data(extracted_data_reversed: list, headers: list[str]):
+    """
+    Roll up data from a list of headers into a LeapCStructMock.
+    :param extracted_data_reversed: Reverse list of data to consume
+    :param headers: List of headers to consume
+    :return: LeapCStructMock containing the rolled up data
+    """
+    struct = LeapCStructMock()
+    for header in headers:
+        root = struct
+        while "." in header:
+            root_header, sub_header = header.split(".", maxsplit=1)
+            if not hasattr(root, root_header):
+                setattr(root, root_header, LeapCStructMock())
+            root = getattr(root, root_header)
+            header = sub_header
+        setattr(root, header, extracted_data_reversed.pop())
+    return struct
+
+
+def roll_up_digit_data(extracted_data_reversed: list):
+    """
+    Roll up digit data into a Digit.
+    :param extracted_data_reversed: Reverse list of data to consume
+    :return: Digit containing the rolled up data
+    """
+    digit_data = roll_up_data(extracted_data_reversed, digit_data_headers)
+    # the ordering of bones matters and MUST match the Digit.bones ordering
+    for bone in ["metacarpal", "proximal", "intermediate", "distal"]:
+        bone_data = roll_up_data(extracted_data_reversed, bone_data_headers)
+        setattr(digit_data, bone, bone_data)
+    return digit_data
+
+
+def roll_up_hand_data(extracted_hand_data: list):
+    """
+    Roll up extracted hand data into a complete Hand object, including Hand, Palm, Digit and Bone data.
+    :param extracted_hand_data: List of extracted hand data to consume
+    :return: Hand containing the rolled up data
+    """
+    extracted_data_reversed = extracted_hand_data[::-1]
+
+    # Roll up hand data
+    hand_data = roll_up_data(extracted_data_reversed, hand_data_headers)
+
+    # Roll up palm data
+    palm_data = roll_up_data(extracted_data_reversed, palm_data_headers)
+    setattr(hand_data, "palm", palm_data)
+
+    # Roll up digit data
+    # the ordering of digits matters and MUST match the Hand.digits ordering
+    for digit in ["thumb", "index", "middle", "ring", "pinky"]:
+        digit_data = roll_up_digit_data(extracted_data_reversed)
+        setattr(hand_data, digit, digit_data)
+
+    # should've consumed all the data
+    assert len(extracted_data_reversed) == 0
+
+    return Hand(hand_data)
 
 
 def main():
@@ -153,7 +186,7 @@ def main():
     try:
         while True:
             if tracker.most_recent_event:
-                tracker.render_hands(tracker.most_recent_event)
+                tracker.render_hands(tracker.most_recent_event.hands)
                 cv2.imshow(tracker.name, tracker.output_image)
                 key = cv2.waitKey(1)
 
@@ -165,10 +198,13 @@ def main():
                     else:
                         tracker.hands_format = "Skeleton"
 
-                data = extract_event_data(tracker.most_recent_event)
-                if data:
-                    print(len(data))
-                    print(data)
+                for hand in tracker.most_recent_event.hands:
+                    if hand.type == HandType.Left:
+                        continue  # ignore left hand for now
+                    hand_data = extract_hand_data(hand)
+                    hand = roll_up_hand_data(hand_data)
+                    hand_data_test = extract_hand_data(hand)
+                    assert hand_data == hand_data_test
 
 
     except Exception as e:

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 import leap
+from leap.datatypes import Hand
 from leap.events import TrackingEvent
 
 _TRACKING_MODES = {
@@ -55,15 +56,14 @@ class LeapMotionTracker(leap.Listener):
         else:
             return None
 
-    def render_hands(self, event: TrackingEvent):
+    def render_hands(self, hands: list[Hand]):
         # Clear the previous image
         self.output_image[:, :] = 0
 
-        if len(event.hands) == 0:
+        if len(hands) == 0:
             return
 
-        for i in range(0, len(event.hands)):
-            hand = event.hands[i]
+        for hand in hands:
             for index_digit in range(0, 5):
                 digit = hand.digits[index_digit]
                 for index_bone in range(0, 4):
@@ -127,7 +127,7 @@ def main():
     while True:
         time.sleep(1)
         if tracker.most_recent_event:
-            tracker.render_hands(tracker.most_recent_event)
+            tracker.render_hands(tracker.most_recent_event.hands)
             cv2.imshow(tracker.name, tracker.output_image)
             key = cv2.waitKey(1)
 
