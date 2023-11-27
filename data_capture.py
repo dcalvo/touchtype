@@ -184,8 +184,8 @@ def main():
     try:
         with LeapMotionTracker() as tracker:
             while True:
-                if tracker.most_recent_event:
-                    tracker.render_hands(tracker.most_recent_event.hands)
+                if tracker.has_new_event:
+                    tracker.render_hands(tracker.event.hands)
                     cv2.imshow(tracker.name, tracker.output_image)
                     key = cv2.waitKey(1)
 
@@ -197,7 +197,7 @@ def main():
                         else:
                             tracker.hands_format = "Skeleton"
 
-                    for hand in tracker.most_recent_event.hands:
+                    for hand in tracker.event.hands:
                         if hand.type == HandType.Left:
                             continue  # ignore left hand for now
                         # get the data from the tracker, flatten it to extract the hand data

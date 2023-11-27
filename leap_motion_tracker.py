@@ -24,7 +24,8 @@ class LeapMotionTracker(leap.Listener):
 
         self.connection = leap.Connection()
         self.connection.add_listener(self)
-        self.most_recent_event: TrackingEvent | None = None
+        self.has_new_event = False
+        self._event = None
 
     def __enter__(self):
         self.connection.connect()
@@ -49,7 +50,15 @@ class LeapMotionTracker(leap.Listener):
         print(f"Found device {info.serial}")
 
     def on_tracking_event(self, event):
-        self.most_recent_event = event
+        self._event = event
+        self.has_new_event = True
+
+    @property
+    def event(self) -> TrackingEvent:
+        if self._event is None:
+            raise ValueError("No event has been received yet")
+        self.has_new_event = False
+        return self._event
 
     def get_joint_position(self, bone):
         if bone:
@@ -126,8 +135,8 @@ def main():
     with LeapMotionTracker() as tracker:
         while True:
             time.sleep(1)  # test sleep delay when polling LeapMotionTracker
-            if tracker.most_recent_event:
-                tracker.render_hands(tracker.most_recent_event.hands)
+            if tracker.has_new_event:
+                tracker.render_hands(tracker.event.hands)
                 cv2.imshow(tracker.name, tracker.output_image)
                 key = cv2.waitKey(1)
 
