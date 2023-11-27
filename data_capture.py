@@ -181,36 +181,37 @@ def roll_up_hand_data(extracted_hand_data: list):
 
 
 def main():
-    tracker = LeapMotionTracker()
-    tracker.run()
     try:
-        while True:
-            if tracker.most_recent_event:
-                tracker.render_hands(tracker.most_recent_event.hands)
-                cv2.imshow(tracker.name, tracker.output_image)
-                key = cv2.waitKey(1)
+        with LeapMotionTracker() as tracker:
+            while True:
+                if tracker.most_recent_event:
+                    tracker.render_hands(tracker.most_recent_event.hands)
+                    cv2.imshow(tracker.name, tracker.output_image)
+                    key = cv2.waitKey(1)
 
-                if key == ord("x"):
-                    break
-                elif key == ord("f"):
-                    if tracker.hands_format == "Skeleton":
-                        tracker.hands_format = "Dots"
-                    else:
-                        tracker.hands_format = "Skeleton"
+                    if key == ord("x"):
+                        break
+                    elif key == ord("f"):
+                        if tracker.hands_format == "Skeleton":
+                            tracker.hands_format = "Dots"
+                        else:
+                            tracker.hands_format = "Skeleton"
 
-                for hand in tracker.most_recent_event.hands:
-                    if hand.type == HandType.Left:
-                        continue  # ignore left hand for now
-                    hand_data = extract_hand_data(hand)
-                    hand = roll_up_hand_data(hand_data)
-                    hand_data_test = extract_hand_data(hand)
-                    assert hand_data == hand_data_test
+                    for hand in tracker.most_recent_event.hands:
+                        if hand.type == HandType.Left:
+                            continue  # ignore left hand for now
+                        # get the data from the tracker, flatten it to extract the hand data
+                        hand_data = extract_hand_data(hand)
+                        # take the flattened/extracted data and roll it back up into a Hand object
+                        hand = roll_up_hand_data(hand_data)
+                        # take the rolled up Hand object and flatten it again
+                        hand_data_test = extract_hand_data(hand)
+                        # we should have the same data as before (that we care about)
+                        assert hand_data == hand_data_test
 
 
     except Exception as e:
         raise e
-    finally:
-        tracker.stop()
 
 
 if __name__ == "__main__":

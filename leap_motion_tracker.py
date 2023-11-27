@@ -26,6 +26,13 @@ class LeapMotionTracker(leap.Listener):
         self.connection.add_listener(self)
         self.most_recent_event: TrackingEvent | None = None
 
+    def __enter__(self):
+        self.connection.connect()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.connection.disconnect()
+
     def on_connection_event(self, event):
         pass
 
@@ -43,12 +50,6 @@ class LeapMotionTracker(leap.Listener):
 
     def on_tracking_event(self, event):
         self.most_recent_event = event
-
-    def run(self):
-        self.connection.connect()
-
-    def stop(self):
-        self.connection.disconnect()
 
     def get_joint_position(self, bone):
         if bone:
@@ -122,23 +123,21 @@ class LeapMotionTracker(leap.Listener):
 
 
 def main():
-    tracker = LeapMotionTracker()
-    tracker.run()
-    while True:
-        time.sleep(1)
-        if tracker.most_recent_event:
-            tracker.render_hands(tracker.most_recent_event.hands)
-            cv2.imshow(tracker.name, tracker.output_image)
-            key = cv2.waitKey(1)
+    with LeapMotionTracker() as tracker:
+        while True:
+            time.sleep(1)  # test sleep delay when polling LeapMotionTracker
+            if tracker.most_recent_event:
+                tracker.render_hands(tracker.most_recent_event.hands)
+                cv2.imshow(tracker.name, tracker.output_image)
+                key = cv2.waitKey(1)
 
-            if key == ord("x"):
-                break
-            elif key == ord("f"):
-                if tracker.hands_format == "Skeleton":
-                    tracker.hands_format = "Dots"
-                else:
-                    tracker.hands_format = "Skeleton"
-    tracker.stop()
+                if key == ord("x"):
+                    break
+                elif key == ord("f"):
+                    if tracker.hands_format == "Skeleton":
+                        tracker.hands_format = "Dots"
+                    else:
+                        tracker.hands_format = "Skeleton"
 
 
 if __name__ == "__main__":
